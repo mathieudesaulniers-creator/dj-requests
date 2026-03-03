@@ -24,7 +24,7 @@
     .results{background:var(--gray);border:1px solid var(--gray2);border-radius:4px;overflow:hidden;margin-bottom:16px;display:none}
     .result-item{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;transition:background 0.15s;border-bottom:1px solid var(--gray2)}
     .result-item:last-child{border-bottom:none}
-    .result-item:hover{background:var(--gray2)}
+    .result-item:hover,.result-item:active{background:var(--gray2)}
     .result-item img{width:44px;height:44px;border-radius:2px;object-fit:cover;flex-shrink:0}
     .result-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .result-artist{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -42,15 +42,11 @@
     .success-title{font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:3px;color:var(--accent2)}
     .success-sub{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.8}
     .btn-another{margin-top:24px;background:transparent;border:1px solid var(--gray2);color:var(--white);padding:12px 24px;font-family:'Space Mono',monospace;font-size:12px;cursor:pointer;border-radius:4px}
-    .btn-another:hover{border-color:var(--white)}
     .loading{text-align:center;padding:20px;color:var(--muted);font-size:12px;letter-spacing:2px}
     .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--gray2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px}
     @keyframes spin{to{transform:rotate(360deg)}}
     .error-screen{text-align:center;padding:60px 20px;display:none}
     .error-screen p{font-size:13px;color:var(--muted);line-height:1.8;margin-top:16px}
-    .auth-screen{text-align:center;padding:40px 20px;display:none}
-    .auth-screen p{font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:24px}
-    .btn-auth{background:#1DB954;color:#000;border:none;border-radius:4px;padding:16px 32px;font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:3px;cursor:pointer}
     footer{margin-top:48px;font-size:10px;letter-spacing:2px;color:#222;text-transform:uppercase}
   </style>
 </head>
@@ -63,10 +59,6 @@
   </header>
   <div id="loadingScreen" class="loading"><span class="spinner"></span>Chargement...</div>
   <div id="errorScreen" class="error-screen"><span style="font-size:48px">❌</span><p>Événement introuvable.<br>Vérifie le lien ou le QR code.</p></div>
-  <div id="authScreen" class="auth-screen">
-    <p>Connecte-toi avec Spotify<br>pour soumettre une demande.</p>
-    <button class="btn-auth" onclick="startGuestAuth()">🎵 Connecter Spotify</button>
-  </div>
   <div id="mainApp" style="display:none">
     <div class="search-box">
       <input type="text" id="searchInput" placeholder="Titre, artiste..." autocomplete="off">
@@ -92,14 +84,9 @@
   <footer>Propulsé par Spotify</footer>
 </div>
 <script>
-  const CLIENT_ID='9c193b00efa34abeaae796b7d87bb007';
-  const REDIRECT_URI='https://mathieudesaulniers-creator.github.io/dj-requests/callback.html';
   const JSONBIN_KEY='$2a$10$UQotBJWZnI0qYxpUCoGcEu6CTp3GY0u2a7dQWZ1OtMfZpK3AWMl2a';
   const JSONBIN_BIN='69a707f943b1c97be9afa9f1';
-  const TOKEN_KEY='djreq_token', EXPIRY_KEY='djreq_expiry';
-  let selectedTrack=null, searchTimeout=null, token=null, playlistId=null, eventCode=null;
-
-  function getToken(){ const e=localStorage.getItem(EXPIRY_KEY); return(e&&Date.now()<parseInt(e))?localStorage.getItem(TOKEN_KEY):null; }
+  let selectedTrack=null, searchTimeout=null, searchToken=null, playlistId=null, eventCode=null, record=null;
 
   async function init(){
     const params=new URLSearchParams(window.location.search);
@@ -108,26 +95,17 @@
     try{
       const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
       const data=await res.json();
-      const ev=(data.record.events||[]).find(e=>e.code===eventCode);
+      record=data.record;
+      const ev=(record.events||[]).find(e=>e.code===eventCode);
       if(!ev){ showError(); return; }
       playlistId=ev.playlistId;
       document.getElementById('eventBadge').textContent=ev.name;
+      searchToken=record.searchToken;
+      const tokenExpiry=parseInt(record.searchTokenExpiry||'0');
+      if(!searchToken||Date.now()>tokenExpiry){ showError(); document.querySelector('#errorScreen p').textContent='Le DJ n\'est pas encore connecté. Réessaie dans quelques minutes.'; return; }
       document.getElementById('loadingScreen').style.display='none';
-      token=getToken();
-      if(!token){ document.getElementById('authScreen').style.display='block'; return; }
       document.getElementById('mainApp').style.display='block';
     }catch(e){ showError(); }
-  }
-
-  function generateVerifier(){ const a=new Uint8Array(32); crypto.getRandomValues(a); return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,''); }
-  async function generateChallenge(v){ const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)); return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,''); }
-
-  async function startGuestAuth(){
-    const v=generateVerifier(); const c=await generateChallenge(v);
-    sessionStorage.setItem('pkce_verifier',v);
-    sessionStorage.setItem('guest_event',eventCode);
-    const s='playlist-modify-public playlist-modify-private';
-    window.location.href=`https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(s)}&code_challenge_method=S256&code_challenge=${c}`;
   }
 
   function showError(){ document.getElementById('loadingScreen').style.display='none'; document.getElementById('errorScreen').style.display='block'; }
@@ -144,7 +122,7 @@
     el.style.display='block';
     el.innerHTML='<div class="loading"><span class="spinner"></span>Recherche...</div>';
     try{
-      const res=await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5`,{headers:{'Authorization':'Bearer '+token}});
+      const res=await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5`,{headers:{'Authorization':'Bearer '+searchToken}});
       const data=await res.json();
       const tracks=data.tracks?.items||[];
       if(!tracks.length){ el.innerHTML='<div class="loading">Aucun résultat</div>'; return; }
@@ -178,13 +156,14 @@
     const btn=document.getElementById('btnSubmit');
     btn.disabled=true; btn.textContent='⏳ Envoi...';
     try{
-      await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`,{
-        method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-        body:JSON.stringify({uris:[selectedTrack.uri]})
-      });
+      const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
+      const data=await res.json(); const rec=data.record;
+      rec.requests=rec.requests||[];
+      rec.requests.push({id:Date.now().toString(),eventCode,uri:selectedTrack.uri,title:selectedTrack.name,artist:selectedTrack.artist,img:selectedTrack.img,status:'pending',createdAt:Date.now()});
+      await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':JSONBIN_KEY},body:JSON.stringify(rec)});
       document.getElementById('selectedSong').style.display='none';
       btn.style.display='none';
-      document.getElementById('successSub').textContent='"'+selectedTrack.name+'" a été ajoutée !';
+      document.getElementById('successSub').textContent='"'+selectedTrack.name+'" a été envoyée au DJ !';
       document.getElementById('successMsg').style.display='block';
     }catch(e){ btn.disabled=false; btn.textContent='🎵 Envoyer la demande'; alert('Erreur, réessaie !'); }
   }
