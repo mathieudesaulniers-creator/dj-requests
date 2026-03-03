@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DJ.RESQUESTS — Dashboard</title>
+  <title>DJ.REQUEST — Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -48,12 +48,23 @@
     .empty { text-align:center; padding:60px 20px; color:var(--muted); font-size:13px; line-height:1.8; }
     .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:100; display:none; align-items:center; justify-content:center; padding:20px; }
     .modal-overlay.open { display:flex; }
-    .modal { background:var(--gray); border:1px solid var(--gray2); border-radius:6px; padding:32px; width:100%; max-width:440px; }
+    .modal { background:var(--gray); border:1px solid var(--gray2); border-radius:6px; padding:32px; width:100%; max-width:440px; max-height:90vh; overflow-y:auto; }
     .modal-title { font-family:'Bebas Neue',sans-serif; font-size:32px; letter-spacing:2px; margin-bottom:24px; }
     .field { margin-bottom:16px; }
     .field label { display:block; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
     .field input { width:100%; background:var(--black); border:1px solid var(--gray2); border-radius:4px; padding:12px 14px; font-family:'Space Mono',monospace; font-size:13px; color:var(--white); outline:none; }
     .field input:focus { border-color:var(--accent); }
+    .playlist-results { background:var(--black); border:1px solid var(--gray2); border-radius:4px; margin-top:6px; overflow:hidden; display:none; max-height:200px; overflow-y:auto; }
+    .pl-item { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; border-bottom:1px solid var(--gray2); transition:background 0.15s; }
+    .pl-item:last-child { border-bottom:none; }
+    .pl-item:hover { background:var(--gray2); }
+    .pl-img { width:36px; height:36px; border-radius:2px; object-fit:cover; background:var(--gray2); flex-shrink:0; }
+    .pl-name { font-size:12px; font-weight:700; }
+    .pl-count { font-size:10px; color:var(--muted); margin-top:2px; }
+    .pl-selected { background:rgba(29,185,84,0.1); border:1px solid rgba(29,185,84,0.4); border-radius:4px; padding:10px 12px; margin-top:6px; display:none; align-items:center; gap:10px; }
+    .pl-selected img { width:36px; height:36px; border-radius:2px; }
+    .pl-selected-name { font-size:12px; font-weight:700; color:#1DB954; }
+    .pl-selected-count { font-size:10px; color:var(--muted); margin-top:2px; }
     .modal-actions { display:flex; gap:10px; margin-top:24px; }
     .btn-create { flex:1; background:var(--accent); color:var(--white); border:none; border-radius:4px; padding:14px; font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:2px; cursor:pointer; }
     .btn-cancel { background:transparent; border:1px solid var(--gray2); color:var(--muted); border-radius:4px; padding:14px 20px; font-family:'Space Mono',monospace; font-size:12px; cursor:pointer; }
@@ -72,11 +83,10 @@
 <body>
 <div class="container">
   <header>
-    <div class="logo">DJ<span>.</span>REQ</div>
+    <div class="logo">DJ<span>.</span>REQUEST</div>
     <p class="tagline">Gestion des événements</p>
   </header>
 
-  <!-- Mot de passe -->
   <div id="pwScreen" class="pw-screen" style="display:none">
     <p style="font-size:12px;color:var(--muted);margin-bottom:24px">Accès DJ requis</p>
     <div><input type="password" id="pwInput" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPw()"></div>
@@ -84,13 +94,11 @@
     <p class="pw-error" id="pwError">Mot de passe incorrect</p>
   </div>
 
-  <!-- Auth Spotify -->
   <div id="authScreen" style="display:none">
     <p>Connecte ton compte Spotify<br>pour gérer tes événements.</p>
     <button class="btn-auth" onclick="startAuth()">🎵 Connecter Spotify</button>
   </div>
 
-  <!-- Dashboard -->
   <div id="dashboard" style="display:none">
     <div class="user-bar">
       <img id="userAvatar" class="user-avatar" src="" alt="">
@@ -108,7 +116,18 @@
     <div class="modal-title">Nouvel événement</div>
     <div class="field"><label>Nom de l'événement</label><input type="text" id="eventName" placeholder="ex: Mariage Tremblay"></div>
     <div class="field"><label>Date</label><input type="date" id="eventDate"></div>
-    <div class="field"><label>Nom de la playlist Spotify</label><input type="text" id="playlistName" placeholder="ex: Soirée Tremblay 2026"></div>
+    <div class="field">
+      <label>Playlist Spotify</label>
+      <input type="text" id="plSearch" placeholder="Chercher une playlist..." autocomplete="off" oninput="searchPlaylists(this.value)">
+      <div class="playlist-results" id="plResults"></div>
+      <div class="pl-selected" id="plSelected">
+        <img id="plSelectedImg" src="" alt="">
+        <div>
+          <div class="pl-selected-name" id="plSelectedName"></div>
+          <div class="pl-selected-count" id="plSelectedCount"></div>
+        </div>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal()">Annuler</button>
       <button class="btn-create" id="btnCreate" onclick="creerEvenement()">Créer</button>
@@ -126,19 +145,14 @@
   const TOKEN_KEY='djreq_token', EXPIRY_KEY='djreq_expiry', USER_KEY='djreq_user';
   const DJ_PASSWORD='dj2026';
   const PW_KEY='djreq_pw';
-  let token=null, events=[];
+  let token=null, events=[], allPlaylists=[], selectedPlaylist=null, plSearchTimeout=null;
 
   function getToken(){ const e=localStorage.getItem(EXPIRY_KEY); return(e&&Date.now()<parseInt(e))?localStorage.getItem(TOKEN_KEY):null; }
 
   function checkPw(){
     const val=document.getElementById('pwInput').value;
-    if(val===DJ_PASSWORD){
-      sessionStorage.setItem(PW_KEY,'ok');
-      document.getElementById('pwScreen').style.display='none';
-      checkAuth();
-    } else {
-      document.getElementById('pwError').style.display='block';
-    }
+    if(val===DJ_PASSWORD){ sessionStorage.setItem(PW_KEY,'ok'); document.getElementById('pwScreen').style.display='none'; checkAuth(); }
+    else { document.getElementById('pwError').style.display='block'; }
   }
 
   function generateVerifier(){ const a=new Uint8Array(32); crypto.getRandomValues(a); return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,''); }
@@ -147,7 +161,7 @@
   async function startAuth(){
     const v=generateVerifier(); const c=await generateChallenge(v);
     sessionStorage.setItem('pkce_verifier',v);
-    const s='playlist-modify-public playlist-modify-private';
+    const s='playlist-modify-public playlist-modify-private playlist-read-private playlist-read-collaborative';
     window.location.href=`https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(s)}&code_challenge_method=S256&code_challenge=${c}`;
   }
 
@@ -155,7 +169,7 @@
 
   async function loadData(){
     const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
-    const data=await res.json(); events=data.record.events||[]; return data.record;
+    const data=await res.json(); return data.record;
   }
 
   async function saveData(record){
@@ -165,10 +179,7 @@
   async function checkAuth(){
     token=getToken();
     if(!token){ document.getElementById('authScreen').style.display='block'; return; }
-    // Save token to JSONBin for guests to use for search
-    const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
-    const data=await res.json();
-    const record=data.record;
+    const record=await loadData();
     record.searchToken=token;
     record.searchTokenExpiry=localStorage.getItem(EXPIRY_KEY);
     await saveData(record);
@@ -178,16 +189,46 @@
     if(!user){ const r=await fetch('https://api.spotify.com/v1/me',{headers:{'Authorization':'Bearer '+token}}); user=await r.json(); localStorage.setItem(USER_KEY,JSON.stringify(user)); }
     document.getElementById('userName').textContent=user.display_name||user.id;
     if(user.images&&user.images[0]) document.getElementById('userAvatar').src=user.images[0].url;
+    // Load all playlists
+    const plRes=await fetch('https://api.spotify.com/v1/me/playlists?limit=50',{headers:{'Authorization':'Bearer '+token}});
+    const plData=await plRes.json();
+    allPlaylists=plData.items||[];
     events=record.events||[];
     renderEvents(record);
   }
 
   async function init(){
-    if(!sessionStorage.getItem(PW_KEY)){
-      document.getElementById('pwScreen').style.display='block'; return;
-    }
+    if(!sessionStorage.getItem(PW_KEY)){ document.getElementById('pwScreen').style.display='block'; return; }
     checkAuth();
   }
+
+  function searchPlaylists(q){
+    clearTimeout(plSearchTimeout);
+    const el=document.getElementById('plResults');
+    if(!q.trim()){ el.style.display='none'; return; }
+    plSearchTimeout=setTimeout(()=>{
+      const filtered=allPlaylists.filter(p=>p.name.toLowerCase().includes(q.toLowerCase()));
+      if(!filtered.length){ el.style.display='none'; return; }
+      el.style.display='block';
+      el.innerHTML=filtered.map(p=>`
+        <div class="pl-item" onclick="selectPlaylist('${p.id}','${esc(p.name)}',${p.tracks.total},'${p.images&&p.images[0]?p.images[0].url:''}','${p.external_urls?.spotify||''}')">
+          ${p.images&&p.images[0]?`<img class="pl-img" src="${p.images[0].url}">`:'<div class="pl-img"></div>'}
+          <div><div class="pl-name">${p.name}</div><div class="pl-count">${p.tracks.total} chansons</div></div>
+        </div>`).join('');
+    },300);
+  }
+
+  function selectPlaylist(id,name,count,img,url){
+    selectedPlaylist={id,name,count,img,url};
+    document.getElementById('plResults').style.display='none';
+    document.getElementById('plSearch').value=name;
+    document.getElementById('plSelectedImg').src=img;
+    document.getElementById('plSelectedName').textContent=name;
+    document.getElementById('plSelectedCount').textContent=count+' chansons';
+    document.getElementById('plSelected').style.display='flex';
+  }
+
+  function esc(s){ return s.replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 
   function renderEvents(record){
     const c=document.getElementById('eventsList');
@@ -227,26 +268,20 @@
     }).join('');
   }
 
-  function toggleRequests(i){
-    const el=document.getElementById('req-'+i);
-    el.style.display=el.style.display==='block'?'none':'block';
-  }
+  function toggleRequests(i){ const el=document.getElementById('req-'+i); el.style.display=el.style.display==='block'?'none':'block'; }
 
-  async function addToPlaylist(reqId, uri, playlistId){
+  async function addToPlaylist(reqId,uri,playlistId){
     const btn=document.querySelector(`#reqitem-${reqId} .btn-add`);
     btn.disabled=true; btn.textContent='...';
     try{
-      await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`,{
-        method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-        body:JSON.stringify({uris:[uri]})
-      });
+      const res=await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({uris:[uri]})});
+      if(!res.ok) throw new Error('Spotify error');
       await dismissRequest(reqId);
     }catch(e){ btn.disabled=false; btn.textContent='+ Spotify'; alert('Erreur Spotify'); }
   }
 
   async function dismissRequest(reqId){
-    const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
-    const data=await res.json(); const record=data.record;
+    const record=await loadData();
     record.requests=(record.requests||[]).filter(r=>r.id!==reqId);
     await saveData(record);
     events=record.events||[];
@@ -254,28 +289,40 @@
   }
 
   function formatDate(d){ const [y,m,day]=d.split('-'); const mo=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']; return `${parseInt(day)} ${mo[parseInt(m)-1]} ${y}`; }
-  function openModal(){ document.getElementById('modalOverlay').classList.add('open'); document.getElementById('eventDate').value=new Date().toISOString().split('T')[0]; setTimeout(()=>document.getElementById('eventName').focus(),100); }
-  function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); ['eventName','playlistName'].forEach(id=>document.getElementById(id).value=''); document.getElementById('btnCreate').innerHTML='Créer'; document.getElementById('btnCreate').disabled=false; }
+
+  function openModal(){
+    selectedPlaylist=null;
+    document.getElementById('plSelected').style.display='none';
+    document.getElementById('plSearch').value='';
+    document.getElementById('modalOverlay').classList.add('open');
+    document.getElementById('eventDate').value=new Date().toISOString().split('T')[0];
+    setTimeout(()=>document.getElementById('eventName').focus(),100);
+  }
+
+  function closeModal(){
+    document.getElementById('modalOverlay').classList.remove('open');
+    ['eventName'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('btnCreate').innerHTML='Créer';
+    document.getElementById('btnCreate').disabled=false;
+    selectedPlaylist=null;
+  }
 
   async function creerEvenement(){
     const name=document.getElementById('eventName').value.trim();
     const date=document.getElementById('eventDate').value;
-    const plName=document.getElementById('playlistName').value.trim()||name;
     if(!name){ document.getElementById('eventName').focus(); return; }
+    if(!selectedPlaylist){ alert('Choisis une playlist Spotify !'); return; }
     const btn=document.getElementById('btnCreate');
     btn.innerHTML='<span class="spinner"></span>Création...'; btn.disabled=true;
     try{
-      const me=await(await fetch('https://api.spotify.com/v1/me',{headers:{'Authorization':'Bearer '+token}})).json();
-      const pl=await(await fetch(`https://api.spotify.com/v1/users/${me.id}/playlists`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({name:plName,public:true,description:'Demandes DJ — '+name})})).json();
       const code=Math.random().toString(36).substring(2,8).toUpperCase();
-      const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
-      const data=await res.json(); const record=data.record;
+      const record=await loadData();
       record.events=record.events||[];
-      record.events.unshift({name,date,playlistName:plName,playlistId:pl.id,playlistUrl:pl.external_urls?.spotify,code,createdAt:Date.now()});
+      record.events.unshift({name,date,playlistName:selectedPlaylist.name,playlistId:selectedPlaylist.id,playlistUrl:selectedPlaylist.url,code,createdAt:Date.now()});
       await saveData(record);
       events=record.events;
       closeModal(); renderEvents(record);
-    }catch(e){ alert('Erreur Spotify. Réessaie.'); btn.innerHTML='Créer'; btn.disabled=false; }
+    }catch(e){ alert('Erreur. Réessaie.'); btn.innerHTML='Créer'; btn.disabled=false; }
   }
 
   function showQR(i){
@@ -289,7 +336,7 @@
 
   function copyLink(i){ const url=BASE_URL+'?event='+events[i].code; navigator.clipboard.writeText(url).then(()=>alert('Lien copié !\n'+url)); }
   function openSpotify(i){ if(events[i].playlistUrl) window.open(events[i].playlistUrl,'_blank'); }
-  async function supprimerEvenement(i){ if(!confirm('Supprimer cet événement ?')) return; const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}}); const data=await res.json(); const record=data.record; record.events.splice(i,1); await saveData(record); events=record.events; renderEvents(record); }
+  async function supprimerEvenement(i){ if(!confirm('Supprimer cet événement ?')) return; const record=await loadData(); record.events.splice(i,1); await saveData(record); events=record.events; renderEvents(record); }
 
   init();
 </script>
