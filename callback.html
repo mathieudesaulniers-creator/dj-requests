@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ.REQ — Connexion</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0a0a0a;color:#f0ede8;font-family:'Space Mono',monospace;min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px}
+    .logo{font-family:'Bebas Neue',sans-serif;font-size:56px;letter-spacing:4px}
+    .logo span{color:#ff3b00}
+    p{font-size:12px;color:#666;letter-spacing:2px;margin-top:12px}
+    .spinner{width:32px;height:32px;border:3px solid #1a1a1a;border-top-color:#ff3b00;border-radius:50%;animation:spin 0.6s linear infinite;margin:24px auto}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div>
+    <div class="logo">DJ<span>.</span>REQ</div>
+    <div class="spinner"></div>
+    <p id="status">Connexion en cours...</p>
+  </div>
+  <script>
+    const TOKEN_KEY='djreq_token', EXPIRY_KEY='djreq_expiry';
+    const hash=Object.fromEntries(window.location.hash.substring(1).split('&').filter(Boolean).map(p=>p.split('=')));
+    const token=hash['access_token'];
+    const expiresIn=parseInt(hash['expires_in']||'3600');
+    if(token){
+      localStorage.setItem(TOKEN_KEY,token);
+      localStorage.setItem(EXPIRY_KEY,Date.now()+expiresIn*1000);
+      document.getElementById('status').textContent='Connecté ! Redirection...';
+      setTimeout(()=>window.location.href='./index.html',800);
+    } else {
+      document.getElementById('status').textContent='Erreur de connexion. Réessaie.';
+    }
+  </script>
+</body>
+</html>
