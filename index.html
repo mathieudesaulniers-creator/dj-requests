@@ -83,7 +83,7 @@
     <div class="field"><label>Nom de la playlist Spotify</label><input type="text" id="playlistName" placeholder="ex: Soirée Tremblay 2026"></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal()">Annuler</button>
-      <button class="btn-create" id="btnCreate" onclick="createEvent()">Créer</button>
+      <button class="btn-create" id="btnCreate" onclick="creerEvenement()">Créer</button>
     </div>
   </div>
 </div>
@@ -150,7 +150,7 @@
   function openModal(){ document.getElementById('modalOverlay').classList.add('open'); document.getElementById('eventDate').value=new Date().toISOString().split('T')[0]; setTimeout(()=>document.getElementById('eventName').focus(),100); }
   function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); ['eventName','playlistName'].forEach(id=>document.getElementById(id).value=''); document.getElementById('btnCreate').innerHTML='Créer'; document.getElementById('btnCreate').disabled=false; }
 
-  async function createEvent(){
+  async function creerEvenement(){
     const name=document.getElementById('eventName').value.trim();
     const date=document.getElementById('eventDate').value;
     const plName=document.getElementById('playlistName').value.trim()||name;
