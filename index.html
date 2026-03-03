@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ.REQ — Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --black:#0a0a0a; --white:#f0ede8; --accent:#ff3b00; --accent2:#ffcc00; --gray:#1a1a1a; --gray2:#2a2a2a; --muted:#555; }
+    body { background:var(--black); color:var(--white); font-family:'Space Mono',monospace; min-height:100vh; padding:40px 20px; }
+    .container { max-width:600px; margin:0 auto; }
+    .logo { font-family:'Bebas Neue',sans-serif; font-size:64px; letter-spacing:4px; line-height:1; }
+    .logo span { color:var(--accent); }
+    .tagline { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); margin-top:4px; }
+    header { margin-bottom:40px; }
+    .user-bar { display:flex; align-items:center; gap:12px; margin-top:20px; padding:12px 16px; background:var(--gray); border-radius:4px; border:1px solid var(--gray2); }
+    .user-avatar { width:32px; height:32px; border-radius:50%; background:var(--gray2); object-fit:cover; }
+    .user-name { font-size:12px; flex:1; }
+    .btn-logout { font-size:10px; color:var(--muted); background:none; border:none; cursor:pointer; font-family:'Space Mono',monospace; }
+    .btn-logout:hover { color:var(--white); }
+    .section-title { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); margin-bottom:16px; }
+    .btn-new { width:100%; background:var(--accent); color:var(--white); border:none; border-radius:4px; padding:18px; font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:3px; cursor:pointer; margin-bottom:32px; }
+    .btn-new:hover { background:#e03300; }
+    .event-card { background:var(--gray); border:1px solid var(--gray2); border-radius:4px; padding:20px; margin-bottom:12px; }
+    .event-name { font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:2px; }
+    .event-date { font-size:10px; color:var(--muted); margin-top:2px; }
+    .event-playlist { font-size:11px; color:#1DB954; margin-top:4px; }
+    .event-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+    .btn-sm { font-family:'Space Mono',monospace; font-size:11px; padding:8px 14px; border-radius:3px; cursor:pointer; border:1px solid var(--gray2); background:transparent; color:var(--white); }
+    .btn-sm:hover { border-color:var(--white); }
+    .btn-sm.accent { background:var(--accent2); color:var(--black); border-color:var(--accent2); font-weight:700; }
+    .btn-sm.danger { color:#ff6b6b; }
+    .btn-sm.danger:hover { border-color:#ff6b6b; }
+    .qr-area { display:none; margin-top:14px; padding:16px; background:white; border-radius:4px; text-align:center; }
+    .event-url { font-size:10px; color:#333; word-break:break-all; margin-top:8px; }
+    .empty { text-align:center; padding:60px 20px; color:var(--muted); font-size:13px; line-height:1.8; }
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:100; display:none; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--gray); border:1px solid var(--gray2); border-radius:6px; padding:32px; width:100%; max-width:440px; }
+    .modal-title { font-family:'Bebas Neue',sans-serif; font-size:32px; letter-spacing:2px; margin-bottom:24px; }
+    .field { margin-bottom:16px; }
+    .field label { display:block; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+    .field input { width:100%; background:var(--black); border:1px solid var(--gray2); border-radius:4px; padding:12px 14px; font-family:'Space Mono',monospace; font-size:13px; color:var(--white); outline:none; }
+    .field input:focus { border-color:var(--accent); }
+    .modal-actions { display:flex; gap:10px; margin-top:24px; }
+    .btn-create { flex:1; background:var(--accent); color:var(--white); border:none; border-radius:4px; padding:14px; font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:2px; cursor:pointer; }
+    .btn-cancel { background:transparent; border:1px solid var(--gray2); color:var(--muted); border-radius:4px; padding:14px 20px; font-family:'Space Mono',monospace; font-size:12px; cursor:pointer; }
+    .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,0.2); border-top-color:white; border-radius:50%; animation:spin 0.6s linear infinite; vertical-align:middle; margin-right:6px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .btn-auth { background:#1DB954; color:var(--black); border:none; border-radius:4px; padding:18px 40px; font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:3px; cursor:pointer; }
+    #authScreen { text-align:center; padding:80px 20px; }
+    #authScreen p { font-size:12px; color:var(--muted); line-height:1.9; margin-bottom:32px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">DJ<span>.</span>REQ</div>
+    <p class="tagline">Gestion des événements</p>
+  </header>
+
+  <div id="authScreen">
+    <p>Connecte ton compte Spotify<br>pour gérer tes événements.</p>
+    <button class="btn-auth" onclick="startAuth()">🎵 Connecter Spotify</button>
+  </div>
+
+  <div id="dashboard" style="display:none">
+    <div class="user-bar">
+      <img id="userAvatar" class="user-avatar" src="" alt="">
+      <span class="user-name" id="userName"></span>
+      <button class="btn-logout" onclick="logout()">Déconnecter</button>
+    </div>
+    <div style="margin-top:32px;margin-bottom:8px" class="section-title">Tes événements</div>
+    <button class="btn-new" onclick="openModal()">+ Nouvel événement</button>
+    <div id="eventsList"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-title">Nouvel événement</div>
+    <div class="field"><label>Nom de l'événement</label><input type="text" id="eventName" placeholder="ex: Mariage Tremblay"></div>
+    <div class="field"><label>Date</label><input type="date" id="eventDate"></div>
+    <div class="field"><label>Nom de la playlist Spotify</label><input type="text" id="playlistName" placeholder="ex: Soirée Tremblay 2026"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Annuler</button>
+      <button class="btn-create" id="btnCreate" onclick="createEvent()">Créer</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+  const CLIENT_ID='9c193b00efa34abeaae796b7d87bb007';
+  const REDIRECT_URI='https://mathieudesaulniers-creator.github.io/dj-requests/callback.html';
+  const BASE_URL='https://mathieudesaulniers-creator.github.io/dj-requests/event.html';
+  const TOKEN_KEY='djreq_token', EXPIRY_KEY='djreq_expiry', EVENTS_KEY='djreq_events', USER_KEY='djreq_user';
+  let token=null;
+
+  function getToken(){ const e=localStorage.getItem(EXPIRY_KEY); return(e&&Date.now()<parseInt(e))?localStorage.getItem(TOKEN_KEY):null; }
+  function startAuth(){ const s='playlist-modify-public playlist-modify-private'; window.location.href=`https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(s)}`; }
+  function logout(){ [TOKEN_KEY,EXPIRY_KEY,USER_KEY].forEach(k=>localStorage.removeItem(k)); location.reload(); }
+  function getEvents(){ return JSON.parse(localStorage.getItem(EVENTS_KEY)||'[]'); }
+  function saveEvents(e){ localStorage.setItem(EVENTS_KEY,JSON.stringify(e)); }
+
+  async function init(){
+    token=getToken();
+    if(!token){ document.getElementById('authScreen').style.display='block'; return; }
+    document.getElementById('authScreen').style.display='none';
+    document.getElementById('dashboard').style.display='block';
+    let user=JSON.parse(localStorage.getItem(USER_KEY)||'null');
+    if(!user){ const r=await fetch('https://api.spotify.com/v1/me',{headers:{'Authorization':'Bearer '+token}}); user=await r.json(); localStorage.setItem(USER_KEY,JSON.stringify(user)); }
+    document.getElementById('userName').textContent=user.display_name||user.id;
+    if(user.images&&user.images[0]) document.getElementById('userAvatar').src=user.images[0].url;
+    renderEvents();
+  }
+
+  function renderEvents(){
+    const events=getEvents(), c=document.getElementById('eventsList');
+    if(!events.length){ c.innerHTML='<div class="empty">🎧<br><br>Aucun événement.<br>Crée ton premier événement ci-dessus !</div>'; return; }
+    c.innerHTML=events.map((ev,i)=>`
+      <div class="event-card">
+        <div class="event-name">${ev.name}</div>
+        ${ev.date?`<div class="event-date">${formatDate(ev.date)}</div>`:''}
+        <div class="event-playlist">🎵 ${ev.playlistName}</div>
+        <div class="event-actions">
+          <button class="btn-sm accent" onclick="showQR(${i})">📱 QR Code</button>
+          <button class="btn-sm" onclick="copyLink(${i})">🔗 Copier lien</button>
+          <button class="btn-sm" onclick="openSpotify(${i})">▶ Playlist</button>
+          <button class="btn-sm danger" onclick="deleteEvent(${i})">Supprimer</button>
+        </div>
+        <div class="qr-area" id="qr-${i}">
+          <div id="qrcode-${i}"></div>
+          <div class="event-url">${BASE_URL}?event=${ev.code}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  function formatDate(d){ const [y,m,day]=d.split('-'); const mo=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']; return `${parseInt(day)} ${mo[parseInt(m)-1]} ${y}`; }
+  function openModal(){ document.getElementById('modalOverlay').classList.add('open'); document.getElementById('eventDate').value=new Date().toISOString().split('T')[0]; setTimeout(()=>document.getElementById('eventName').focus(),100); }
+  function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); ['eventName','playlistName'].forEach(id=>document.getElementById(id).value=''); document.getElementById('btnCreate').innerHTML='Créer'; document.getElementById('btnCreate').disabled=false; }
+
+  async function createEvent(){
+    const name=document.getElementById('eventName').value.trim();
+    const date=document.getElementById('eventDate').value;
+    const plName=document.getElementById('playlistName').value.trim()||name;
+    if(!name){ document.getElementById('eventName').focus(); return; }
+    const btn=document.getElementById('btnCreate');
+    btn.innerHTML='<span class="spinner"></span>Création...'; btn.disabled=true;
+    try{
+      const me=await(await fetch('https://api.spotify.com/v1/me',{headers:{'Authorization':'Bearer '+token}})).json();
+      const pl=await(await fetch(`https://api.spotify.com/v1/users/${me.id}/playlists`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({name:plName,public:true,description:'Demandes DJ — '+name})})).json();
+      const code=Math.random().toString(36).substring(2,8).toUpperCase();
+      const events=getEvents();
+      events.unshift({name,date,playlistName:plName,playlistId:pl.id,playlistUrl:pl.external_urls?.spotify,code,createdAt:Date.now()});
+      saveEvents(events); closeModal(); renderEvents();
+    }catch(e){ alert('Erreur Spotify. Réessaie.'); btn.innerHTML='Créer'; btn.disabled=false; }
+  }
+
+  function showQR(i){
+    const el=document.getElementById('qr-'+i);
+    const visible=el.style.display==='block';
+    el.style.display=visible?'none':'block';
+    if(!visible&&!document.getElementById('qrcode-'+i).innerHTML){
+      const ev=getEvents()[i];
+      new QRCode(document.getElementById('qrcode-'+i),{text:BASE_URL+'?event='+ev.code,width:200,height:200,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.H});
+    }
+  }
+
+  function copyLink(i){ const ev=getEvents()[i]; const url=BASE_URL+'?event='+ev.code; navigator.clipboard.writeText(url).then(()=>alert('Lien copié !\n'+url)); }
+  function openSpotify(i){ const ev=getEvents()[i]; if(ev.playlistUrl) window.open(ev.playlistUrl,'_blank'); }
+  function deleteEvent(i){ if(!confirm('Supprimer cet événement ?')) return; const ev=getEvents(); ev.splice(i,1); saveEvents(ev); renderEvents(); }
+
+  const hash=Object.fromEntries(window.location.hash.substring(1).split('&').filter(Boolean).map(p=>p.split('=')));
+  if(hash.access_token){ localStorage.setItem(TOKEN_KEY,hash.access_token); localStorage.setItem(EXPIRY_KEY,Date.now()+parseInt(hash.expires_in||3600)*1000); window.location.hash=''; }
+  init();
+</script>
+</body>
+</html>
