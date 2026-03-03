@@ -34,6 +34,17 @@
     .btn-sm.danger:hover { border-color:#ff6b6b; }
     .qr-area { display:none; margin-top:14px; padding:16px; background:white; border-radius:4px; text-align:center; }
     .event-url { font-size:10px; color:#333; word-break:break-all; margin-top:8px; }
+    .requests-area { margin-top:14px; display:none; }
+    .request-item { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--black); border-radius:3px; margin-bottom:6px; }
+    .request-img { width:36px; height:36px; border-radius:2px; object-fit:cover; background:var(--gray2); flex-shrink:0; }
+    .request-info { flex:1; min-width:0; }
+    .request-title { font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .request-artist { font-size:10px; color:var(--muted); margin-top:2px; }
+    .btn-add { background:#1DB954; color:#000; border:none; border-radius:3px; padding:6px 12px; font-family:'Space Mono',monospace; font-size:10px; font-weight:700; cursor:pointer; flex-shrink:0; }
+    .btn-add:disabled { background:#333; color:#666; cursor:default; }
+    .btn-dismiss { background:transparent; border:1px solid var(--gray2); color:var(--muted); border-radius:3px; padding:6px 10px; font-family:'Space Mono',monospace; font-size:10px; cursor:pointer; flex-shrink:0; }
+    .no-requests { font-size:11px; color:var(--muted); padding:12px; text-align:center; }
+    .badge { display:inline-block; background:var(--accent); color:white; border-radius:10px; font-size:10px; padding:2px 7px; margin-left:6px; vertical-align:middle; }
     .empty { text-align:center; padding:60px 20px; color:var(--muted); font-size:13px; line-height:1.8; }
     .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:100; display:none; align-items:center; justify-content:center; padding:20px; }
     .modal-overlay.open { display:flex; }
@@ -51,6 +62,11 @@
     .btn-auth { background:#1DB954; color:var(--black); border:none; border-radius:4px; padding:18px 40px; font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:3px; cursor:pointer; }
     #authScreen { text-align:center; padding:80px 20px; }
     #authScreen p { font-size:12px; color:var(--muted); line-height:1.9; margin-bottom:32px; }
+    .pw-screen { text-align:center; padding:80px 20px; }
+    .pw-screen input { background:var(--gray); border:1px solid var(--gray2); border-radius:4px; padding:12px 16px; font-family:'Space Mono',monospace; font-size:14px; color:var(--white); outline:none; width:100%; max-width:280px; margin-bottom:16px; text-align:center; letter-spacing:4px; }
+    .pw-screen input:focus { border-color:var(--accent); }
+    .pw-btn { background:var(--accent); color:white; border:none; border-radius:4px; padding:14px 32px; font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:2px; cursor:pointer; }
+    .pw-error { color:var(--accent); font-size:11px; margin-top:8px; display:none; }
   </style>
 </head>
 <body>
@@ -59,10 +75,22 @@
     <div class="logo">DJ<span>.</span>REQ</div>
     <p class="tagline">Gestion des événements</p>
   </header>
-  <div id="authScreen">
+
+  <!-- Mot de passe -->
+  <div id="pwScreen" class="pw-screen" style="display:none">
+    <p style="font-size:12px;color:var(--muted);margin-bottom:24px">Accès DJ requis</p>
+    <div><input type="password" id="pwInput" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPw()"></div>
+    <button class="pw-btn" onclick="checkPw()">Entrer</button>
+    <p class="pw-error" id="pwError">Mot de passe incorrect</p>
+  </div>
+
+  <!-- Auth Spotify -->
+  <div id="authScreen" style="display:none">
     <p>Connecte ton compte Spotify<br>pour gérer tes événements.</p>
     <button class="btn-auth" onclick="startAuth()">🎵 Connecter Spotify</button>
   </div>
+
+  <!-- Dashboard -->
   <div id="dashboard" style="display:none">
     <div class="user-bar">
       <img id="userAvatar" class="user-avatar" src="" alt="">
@@ -96,9 +124,22 @@
   const JSONBIN_KEY='$2a$10$UQotBJWZnI0qYxpUCoGcEu6CTp3GY0u2a7dQWZ1OtMfZpK3AWMl2a';
   const JSONBIN_BIN='69a707f943b1c97be9afa9f1';
   const TOKEN_KEY='djreq_token', EXPIRY_KEY='djreq_expiry', USER_KEY='djreq_user';
+  const DJ_PASSWORD='dj2026';
+  const PW_KEY='djreq_pw';
   let token=null, events=[];
 
   function getToken(){ const e=localStorage.getItem(EXPIRY_KEY); return(e&&Date.now()<parseInt(e))?localStorage.getItem(TOKEN_KEY):null; }
+
+  function checkPw(){
+    const val=document.getElementById('pwInput').value;
+    if(val===DJ_PASSWORD){
+      sessionStorage.setItem(PW_KEY,'ok');
+      document.getElementById('pwScreen').style.display='none';
+      checkAuth();
+    } else {
+      document.getElementById('pwError').style.display='block';
+    }
+  }
 
   function generateVerifier(){ const a=new Uint8Array(32); crypto.getRandomValues(a); return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,''); }
   async function generateChallenge(v){ const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)); return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,''); }
@@ -112,31 +153,48 @@
 
   function logout(){ [TOKEN_KEY,EXPIRY_KEY,USER_KEY].forEach(k=>localStorage.removeItem(k)); location.reload(); }
 
-  async function loadEvents(){
+  async function loadData(){
     const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
-    const data=await res.json(); events=data.record.events||[]; return events;
+    const data=await res.json(); events=data.record.events||[]; return data.record;
   }
 
-  async function saveEvents(){
-    await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':JSONBIN_KEY},body:JSON.stringify({events})});
+  async function saveData(record){
+    await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':JSONBIN_KEY},body:JSON.stringify(record)});
   }
 
-  async function init(){
+  async function checkAuth(){
     token=getToken();
     if(!token){ document.getElementById('authScreen').style.display='block'; return; }
+    // Save token to JSONBin for guests to use for search
+    const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
+    const data=await res.json();
+    const record=data.record;
+    record.searchToken=token;
+    record.searchTokenExpiry=localStorage.getItem(EXPIRY_KEY);
+    await saveData(record);
     document.getElementById('authScreen').style.display='none';
     document.getElementById('dashboard').style.display='block';
     let user=JSON.parse(localStorage.getItem(USER_KEY)||'null');
     if(!user){ const r=await fetch('https://api.spotify.com/v1/me',{headers:{'Authorization':'Bearer '+token}}); user=await r.json(); localStorage.setItem(USER_KEY,JSON.stringify(user)); }
     document.getElementById('userName').textContent=user.display_name||user.id;
     if(user.images&&user.images[0]) document.getElementById('userAvatar').src=user.images[0].url;
-    await loadEvents(); renderEvents();
+    events=record.events||[];
+    renderEvents(record);
   }
 
-  function renderEvents(){
+  async function init(){
+    if(!sessionStorage.getItem(PW_KEY)){
+      document.getElementById('pwScreen').style.display='block'; return;
+    }
+    checkAuth();
+  }
+
+  function renderEvents(record){
     const c=document.getElementById('eventsList');
     if(!events.length){ c.innerHTML='<div class="empty">🎧<br><br>Aucun événement.<br>Crée ton premier événement ci-dessus !</div>'; return; }
-    c.innerHTML=events.map((ev,i)=>`
+    c.innerHTML=events.map((ev,i)=>{
+      const reqs=(record&&record.requests)?record.requests.filter(r=>r.eventCode===ev.code&&r.status==='pending'):[];
+      return `
       <div class="event-card">
         <div class="event-name">${ev.name}</div>
         ${ev.date?`<div class="event-date">${formatDate(ev.date)}</div>`:''}
@@ -145,13 +203,54 @@
           <button class="btn-sm accent" onclick="showQR(${i})">📱 QR Code</button>
           <button class="btn-sm" onclick="copyLink(${i})">🔗 Copier lien</button>
           <button class="btn-sm" onclick="openSpotify(${i})">▶ Playlist</button>
+          <button class="btn-sm" onclick="toggleRequests(${i})">🎵 Demandes${reqs.length?`<span class="badge">${reqs.length}</span>`:''}</button>
           <button class="btn-sm danger" onclick="supprimerEvenement(${i})">Supprimer</button>
         </div>
         <div class="qr-area" id="qr-${i}">
           <div id="qrcode-${i}"></div>
           <div class="event-url">${BASE_URL}?event=${ev.code}</div>
         </div>
-      </div>`).join('');
+        <div class="requests-area" id="req-${i}">
+          ${reqs.length?reqs.map(r=>`
+            <div class="request-item" id="reqitem-${r.id}">
+              <img class="request-img" src="${r.img||''}" alt="">
+              <div class="request-info">
+                <div class="request-title">${r.title}</div>
+                <div class="request-artist">${r.artist}</div>
+              </div>
+              <button class="btn-add" onclick="addToPlaylist('${r.id}','${r.uri}','${ev.playlistId}')">+ Spotify</button>
+              <button class="btn-dismiss" onclick="dismissRequest('${r.id}')">✕</button>
+            </div>`).join('')
+          :'<div class="no-requests">Aucune demande pour l\'instant</div>'}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function toggleRequests(i){
+    const el=document.getElementById('req-'+i);
+    el.style.display=el.style.display==='block'?'none':'block';
+  }
+
+  async function addToPlaylist(reqId, uri, playlistId){
+    const btn=document.querySelector(`#reqitem-${reqId} .btn-add`);
+    btn.disabled=true; btn.textContent='...';
+    try{
+      await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`,{
+        method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({uris:[uri]})
+      });
+      await dismissRequest(reqId);
+    }catch(e){ btn.disabled=false; btn.textContent='+ Spotify'; alert('Erreur Spotify'); }
+  }
+
+  async function dismissRequest(reqId){
+    const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
+    const data=await res.json(); const record=data.record;
+    record.requests=(record.requests||[]).filter(r=>r.id!==reqId);
+    await saveData(record);
+    events=record.events||[];
+    renderEvents(record);
   }
 
   function formatDate(d){ const [y,m,day]=d.split('-'); const mo=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']; return `${parseInt(day)} ${mo[parseInt(m)-1]} ${y}`; }
@@ -169,8 +268,13 @@
       const me=await(await fetch('https://api.spotify.com/v1/me',{headers:{'Authorization':'Bearer '+token}})).json();
       const pl=await(await fetch(`https://api.spotify.com/v1/users/${me.id}/playlists`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({name:plName,public:true,description:'Demandes DJ — '+name})})).json();
       const code=Math.random().toString(36).substring(2,8).toUpperCase();
-      events.unshift({name,date,playlistName:plName,playlistId:pl.id,playlistUrl:pl.external_urls?.spotify,code,createdAt:Date.now()});
-      await saveEvents(); closeModal(); renderEvents();
+      const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
+      const data=await res.json(); const record=data.record;
+      record.events=record.events||[];
+      record.events.unshift({name,date,playlistName:plName,playlistId:pl.id,playlistUrl:pl.external_urls?.spotify,code,createdAt:Date.now()});
+      await saveData(record);
+      events=record.events;
+      closeModal(); renderEvents(record);
     }catch(e){ alert('Erreur Spotify. Réessaie.'); btn.innerHTML='Créer'; btn.disabled=false; }
   }
 
@@ -185,7 +289,7 @@
 
   function copyLink(i){ const url=BASE_URL+'?event='+events[i].code; navigator.clipboard.writeText(url).then(()=>alert('Lien copié !\n'+url)); }
   function openSpotify(i){ if(events[i].playlistUrl) window.open(events[i].playlistUrl,'_blank'); }
-  async function supprimerEvenement(i){ if(!confirm('Supprimer cet événement ?')) return; events.splice(i,1); await saveEvents(); renderEvents(); }
+  async function supprimerEvenement(i){ if(!confirm('Supprimer cet événement ?')) return; const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}}); const data=await res.json(); const record=data.record; record.events.splice(i,1); await saveData(record); events=record.events; renderEvents(record); }
 
   init();
 </script>
