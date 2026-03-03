@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJ.REQ — Demande une chanson</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--black:#0a0a0a;--white:#f0ede8;--accent:#ff3b00;--accent2:#ffcc00;--gray:#1a1a1a;--gray2:#2a2a2a;--muted:#555}
+    body{background:var(--black);color:var(--white);font-family:'Space Mono',monospace;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 20px}
+    body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(255,59,0,0.08) 0%,transparent 60%);pointer-events:none}
+    .container{width:100%;max-width:480px;position:relative;z-index:1}
+    .logo{font-family:'Bebas Neue',sans-serif;font-size:64px;letter-spacing:4px;line-height:1}
+    .logo span{color:var(--accent)}
+    .tagline{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-top:4px}
+    .event-badge{display:inline-block;margin-top:12px;padding:6px 14px;background:rgba(255,59,0,0.1);border:1px solid rgba(255,59,0,0.3);border-radius:2px;font-size:11px;letter-spacing:2px;color:var(--accent);text-transform:uppercase}
+    header{text-align:center;margin-bottom:40px}
+    .search-box{position:relative;margin-bottom:16px}
+    .search-box input{width:100%;background:var(--gray);border:1px solid var(--gray2);border-radius:4px;padding:16px 50px 16px 16px;font-family:'Space Mono',monospace;font-size:14px;color:var(--white);outline:none;transition:border-color 0.2s}
+    .search-box input:focus{border-color:var(--accent)}
+    .search-box input::placeholder{color:var(--muted)}
+    .search-icon{position:absolute;right:16px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+    .results{background:var(--gray);border:1px solid var(--gray2);border-radius:4px;overflow:hidden;margin-bottom:16px;display:none}
+    .result-item{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;transition:background 0.15s;border-bottom:1px solid var(--gray2)}
+    .result-item:last-child{border-bottom:none}
+    .result-item:hover{background:var(--gray2)}
+    .result-item img{width:44px;height:44px;border-radius:2px;object-fit:cover;flex-shrink:0}
+    .result-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .result-artist{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .result-add{color:var(--accent);font-size:22px;font-weight:700;flex-shrink:0}
+    .selected-song{background:var(--gray);border:1px solid var(--accent);border-radius:4px;padding:16px;display:none;align-items:center;gap:12px;margin-bottom:16px}
+    .selected-song img{width:56px;height:56px;border-radius:2px;flex-shrink:0}
+    .selected-title{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .selected-artist{font-size:12px;color:var(--muted);margin-top:4px}
+    .selected-badge{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);background:rgba(255,59,0,0.1);padding:4px 8px;border-radius:2px;flex-shrink:0}
+    .btn-submit{width:100%;background:var(--accent);color:var(--white);border:none;border-radius:4px;padding:18px;font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;cursor:pointer;display:none;transition:background 0.2s}
+    .btn-submit:hover{background:#e03300}
+    .success-msg{text-align:center;padding:40px 20px;display:none}
+    .success-icon{font-size:56px;display:block;margin-bottom:16px;animation:bounce 0.5s ease}
+    @keyframes bounce{0%{transform:scale(0)}60%{transform:scale(1.2)}100%{transform:scale(1)}}
+    .success-title{font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:3px;color:var(--accent2)}
+    .success-sub{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.8}
+    .btn-another{margin-top:24px;background:transparent;border:1px solid var(--gray2);color:var(--white);padding:12px 24px;font-family:'Space Mono',monospace;font-size:12px;cursor:pointer;border-radius:4px}
+    .btn-another:hover{border-color:var(--white)}
+    .loading{text-align:center;padding:20px;color:var(--muted);font-size:12px;letter-spacing:2px}
+    .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--gray2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .error-screen{text-align:center;padding:60px 20px;display:none}
+    .error-screen p{font-size:13px;color:var(--muted);line-height:1.8;margin-top:16px}
+    footer{margin-top:48px;font-size:10px;letter-spacing:2px;color:#222;text-transform:uppercase}
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">DJ<span>.</span>REQ</div>
+    <p class="tagline">Demande une chanson</p>
+    <div class="event-badge" id="eventBadge"></div>
+  </header>
+
+  <div id="errorScreen" class="error-screen">
+    <span style="font-size:48px">❌</span>
+    <p>Événement introuvable.<br>Vérifie le lien ou le QR code.</p>
+  </div>
+
+  <div id="mainApp" style="display:none">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Titre, artiste..." autocomplete="off">
+      <span class="search-icon">🔍</span>
+    </div>
+    <div class="results" id="results"></div>
+    <div class="selected-song" id="selectedSong">
+      <img id="selectedImg" src="" alt="">
+      <div style="flex:1;min-width:0">
+        <div class="selected-title" id="selectedTitle"></div>
+        <div class="selected-artist" id="selectedArtist"></div>
+      </div>
+      <span class="selected-badge">Sélectionnée</span>
+    </div>
+    <button class="btn-submit" id="btnSubmit" onclick="submitSong()">🎵 Envoyer la demande</button>
+    <div class="success-msg" id="successMsg">
+      <span class="success-icon">🎉</span>
+      <div class="success-title">Envoyée !</div>
+      <p class="success-sub" id="successSub"></p>
+      <button class="btn-another" onclick="resetForm()">Faire une autre demande</button>
+    </div>
+  </div>
+  <footer>Propulsé par Spotify</footer>
+</div>
+
+<script>
+  const CLIENT_ID='9c193b00efa34abeaae796b7d87bb007';
+  const TOKEN_KEY='djreq_token', EXPIRY_KEY='djreq_expiry', EVENTS_KEY='djreq_events';
+  let selectedTrack=null, searchTimeout=null, token=null, playlistId=null;
+
+  function getToken(){ const e=localStorage.getItem(EXPIRY_KEY); return(e&&Date.now()<parseInt(e))?localStorage.getItem(TOKEN_KEY):null; }
+
+  function init(){
+    const params=new URLSearchParams(window.location.search);
+    const code=params.get('event');
+    if(!code){ showError(); return; }
+    const events=JSON.parse(localStorage.getItem(EVENTS_KEY)||'[]');
+    const ev=events.find(e=>e.code===code);
+    if(!ev){ showError(); return; }
+    playlistId=ev.playlistId;
+    document.getElementById('eventBadge').textContent=ev.name;
+    token=getToken();
+    if(!token){ startGuestAuth(code); return; }
+    document.getElementById('mainApp').style.display='block';
+  }
+
+  function startGuestAuth(code){
+    const scopes='playlist-modify-public playlist-modify-private';
+    const redirect=encodeURIComponent('https://mathieudesaulniers-creator.github.io/dj-requests/callback.html');
+    const state=encodeURIComponent('guest:'+code);
+    window.location.href=`https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${redirect}&scope=${encodeURIComponent(scopes)}&state=${state}`;
+  }
+
+  function showError(){ document.getElementById('errorScreen').style.display='block'; }
+
+  document.getElementById('searchInput').addEventListener('input',function(){
+    clearTimeout(searchTimeout);
+    const q=this.value.trim();
+    if(q.length<2){ document.getElementById('results').style.display='none'; return; }
+    searchTimeout=setTimeout(()=>searchTracks(q),400);
+  });
+
+  async function searchTracks(q){
+    const el=document.getElementById('results');
+    el.style.display='block';
+    el.innerHTML='<div class="loading"><span class="spinner"></span>Recherche...</div>';
+    try{
+      const res=await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5`,{headers:{'Authorization':'Bearer '+token}});
+      const data=await res.json();
+      const tracks=data.tracks?.items||[];
+      if(!tracks.length){ el.innerHTML='<div class="loading">Aucun résultat</div>'; return; }
+      el.innerHTML=tracks.map(t=>`
+        <div class="result-item" onclick="selectTrack('${t.uri}','${esc(t.name)}','${esc(t.artists[0].name)}','${t.album.images[0]?.url||''}')">
+          <img src="${t.album.images[0]?.url||''}" alt="">
+          <div style="flex:1;min-width:0">
+            <div class="result-title">${t.name}</div>
+            <div class="result-artist">${t.artists.map(a=>a.name).join(', ')}</div>
+          </div>
+          <span class="result-add">+</span>
+        </div>`).join('');
+    }catch(e){ el.innerHTML='<div class="loading">Erreur de connexion</div>'; }
+  }
+
+  function esc(s){ return s.replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+  function selectTrack(uri,name,artist,img){
+    selectedTrack={uri,name,artist,img};
+    document.getElementById('results').style.display='none';
+    document.getElementById('searchInput').value='';
+    document.getElementById('selectedImg').src=img;
+    document.getElementById('selectedTitle').textContent=name;
+    document.getElementById('selectedArtist').textContent=artist;
+    document.getElementById('selectedSong').style.display='flex';
+    document.getElementById('btnSubmit').style.display='block';
+  }
+
+  async function submitSong(){
+    if(!selectedTrack) return;
+    const btn=document.getElementById('btnSubmit');
+    btn.disabled=true; btn.textContent='⏳ Envoi...';
+    try{
+      await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`,{
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({uris:[selectedTrack.uri]})
+      });
+      document.getElementById('selectedSong').style.display='none';
+      btn.style.display='none';
+      document.getElementById('successSub').textContent='"'+selectedTrack.name+'" a été ajoutée à la playlist !';
+      document.getElementById('successMsg').style.display='block';
+    }catch(e){ btn.disabled=false; btn.textContent='🎵 Envoyer la demande'; alert('Erreur, réessaie !'); }
+  }
+
+  function resetForm(){
+    selectedTrack=null;
+    ['successMsg','selectedSong'].forEach(id=>document.getElementById(id).style.display='none');
+    document.getElementById('btnSubmit').style.display='none';
+    document.getElementById('btnSubmit').disabled=false;
+    document.getElementById('btnSubmit').textContent='🎵 Envoyer la demande';
+    document.getElementById('searchInput').value='';
+  }
+
+  init();
+</script>
+</body>
+</html>
