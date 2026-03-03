@@ -59,12 +59,10 @@
     <div class="logo">DJ<span>.</span>REQ</div>
     <p class="tagline">Gestion des événements</p>
   </header>
-
   <div id="authScreen">
     <p>Connecte ton compte Spotify<br>pour gérer tes événements.</p>
     <button class="btn-auth" onclick="startAuth()">🎵 Connecter Spotify</button>
   </div>
-
   <div id="dashboard" style="display:none">
     <div class="user-bar">
       <img id="userAvatar" class="user-avatar" src="" alt="">
@@ -99,7 +97,18 @@
   let token=null;
 
   function getToken(){ const e=localStorage.getItem(EXPIRY_KEY); return(e&&Date.now()<parseInt(e))?localStorage.getItem(TOKEN_KEY):null; }
-  function startAuth(){ const s='playlist-modify-public playlist-modify-private'; window.location.href=`https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(s)}`; }
+
+  function generateVerifier(){ const a=new Uint8Array(32); crypto.getRandomValues(a); return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,''); }
+  async function generateChallenge(v){ const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)); return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,''); }
+
+  async function startAuth(){
+    const v=generateVerifier();
+    const c=await generateChallenge(v);
+    sessionStorage.setItem('pkce_verifier',v);
+    const s='playlist-modify-public playlist-modify-private';
+    window.location.href=`https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(s)}&code_challenge_method=S256&code_challenge=${c}`;
+  }
+
   function logout(){ [TOKEN_KEY,EXPIRY_KEY,USER_KEY].forEach(k=>localStorage.removeItem(k)); location.reload(); }
   function getEvents(){ return JSON.parse(localStorage.getItem(EVENTS_KEY)||'[]'); }
   function saveEvents(e){ localStorage.setItem(EVENTS_KEY,JSON.stringify(e)); }
@@ -172,8 +181,6 @@
   function openSpotify(i){ const ev=getEvents()[i]; if(ev.playlistUrl) window.open(ev.playlistUrl,'_blank'); }
   function deleteEvent(i){ if(!confirm('Supprimer cet événement ?')) return; const ev=getEvents(); ev.splice(i,1); saveEvents(ev); renderEvents(); }
 
-  const hash=Object.fromEntries(window.location.hash.substring(1).split('&').filter(Boolean).map(p=>p.split('=')));
-  if(hash.access_token){ localStorage.setItem(TOKEN_KEY,hash.access_token); localStorage.setItem(EXPIRY_KEY,Date.now()+parseInt(hash.expires_in||3600)*1000); window.location.hash=''; }
   init();
 </script>
 </body>
