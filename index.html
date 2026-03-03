@@ -93,8 +93,10 @@
   const CLIENT_ID='9c193b00efa34abeaae796b7d87bb007';
   const REDIRECT_URI='https://mathieudesaulniers-creator.github.io/dj-requests/callback.html';
   const BASE_URL='https://mathieudesaulniers-creator.github.io/dj-requests/event.html';
-  const TOKEN_KEY='djreq_token', EXPIRY_KEY='djreq_expiry', EVENTS_KEY='djreq_events', USER_KEY='djreq_user';
-  let token=null;
+  const JSONBIN_KEY='$2a$10$UQotBJWZnI0qYxpUCoGcEu6CTp3GY0u2a7dQWZ1OtMfZpK3AWMl2a';
+  const JSONBIN_BIN='69a707f943b1c97be9afa9f1';
+  const TOKEN_KEY='djreq_token', EXPIRY_KEY='djreq_expiry', USER_KEY='djreq_user';
+  let token=null, events=[];
 
   function getToken(){ const e=localStorage.getItem(EXPIRY_KEY); return(e&&Date.now()<parseInt(e))?localStorage.getItem(TOKEN_KEY):null; }
 
@@ -102,16 +104,22 @@
   async function generateChallenge(v){ const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)); return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,''); }
 
   async function startAuth(){
-    const v=generateVerifier();
-    const c=await generateChallenge(v);
+    const v=generateVerifier(); const c=await generateChallenge(v);
     sessionStorage.setItem('pkce_verifier',v);
     const s='playlist-modify-public playlist-modify-private';
     window.location.href=`https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(s)}&code_challenge_method=S256&code_challenge=${c}`;
   }
 
   function logout(){ [TOKEN_KEY,EXPIRY_KEY,USER_KEY].forEach(k=>localStorage.removeItem(k)); location.reload(); }
-  function getEvents(){ return JSON.parse(localStorage.getItem(EVENTS_KEY)||'[]'); }
-  function saveEvents(e){ localStorage.setItem(EVENTS_KEY,JSON.stringify(e)); }
+
+  async function loadEvents(){
+    const res=await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}/latest`,{headers:{'X-Master-Key':JSONBIN_KEY}});
+    const data=await res.json(); events=data.record.events||[]; return events;
+  }
+
+  async function saveEvents(){
+    await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':JSONBIN_KEY},body:JSON.stringify({events})});
+  }
 
   async function init(){
     token=getToken();
@@ -122,11 +130,11 @@
     if(!user){ const r=await fetch('https://api.spotify.com/v1/me',{headers:{'Authorization':'Bearer '+token}}); user=await r.json(); localStorage.setItem(USER_KEY,JSON.stringify(user)); }
     document.getElementById('userName').textContent=user.display_name||user.id;
     if(user.images&&user.images[0]) document.getElementById('userAvatar').src=user.images[0].url;
-    renderEvents();
+    await loadEvents(); renderEvents();
   }
 
   function renderEvents(){
-    const events=getEvents(), c=document.getElementById('eventsList');
+    const c=document.getElementById('eventsList');
     if(!events.length){ c.innerHTML='<div class="empty">🎧<br><br>Aucun événement.<br>Crée ton premier événement ci-dessus !</div>'; return; }
     c.innerHTML=events.map((ev,i)=>`
       <div class="event-card">
@@ -137,7 +145,7 @@
           <button class="btn-sm accent" onclick="showQR(${i})">📱 QR Code</button>
           <button class="btn-sm" onclick="copyLink(${i})">🔗 Copier lien</button>
           <button class="btn-sm" onclick="openSpotify(${i})">▶ Playlist</button>
-          <button class="btn-sm danger" onclick="deleteEvent(${i})">Supprimer</button>
+          <button class="btn-sm danger" onclick="supprimerEvenement(${i})">Supprimer</button>
         </div>
         <div class="qr-area" id="qr-${i}">
           <div id="qrcode-${i}"></div>
@@ -161,9 +169,8 @@
       const me=await(await fetch('https://api.spotify.com/v1/me',{headers:{'Authorization':'Bearer '+token}})).json();
       const pl=await(await fetch(`https://api.spotify.com/v1/users/${me.id}/playlists`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({name:plName,public:true,description:'Demandes DJ — '+name})})).json();
       const code=Math.random().toString(36).substring(2,8).toUpperCase();
-      const events=getEvents();
       events.unshift({name,date,playlistName:plName,playlistId:pl.id,playlistUrl:pl.external_urls?.spotify,code,createdAt:Date.now()});
-      saveEvents(events); closeModal(); renderEvents();
+      await saveEvents(); closeModal(); renderEvents();
     }catch(e){ alert('Erreur Spotify. Réessaie.'); btn.innerHTML='Créer'; btn.disabled=false; }
   }
 
@@ -172,14 +179,13 @@
     const visible=el.style.display==='block';
     el.style.display=visible?'none':'block';
     if(!visible&&!document.getElementById('qrcode-'+i).innerHTML){
-      const ev=getEvents()[i];
-      new QRCode(document.getElementById('qrcode-'+i),{text:BASE_URL+'?event='+ev.code,width:200,height:200,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.H});
+      new QRCode(document.getElementById('qrcode-'+i),{text:BASE_URL+'?event='+events[i].code,width:200,height:200,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.H});
     }
   }
 
-  function copyLink(i){ const ev=getEvents()[i]; const url=BASE_URL+'?event='+ev.code; navigator.clipboard.writeText(url).then(()=>alert('Lien copié !\n'+url)); }
-  function openSpotify(i){ const ev=getEvents()[i]; if(ev.playlistUrl) window.open(ev.playlistUrl,'_blank'); }
-  function deleteEvent(i){ if(!confirm('Supprimer cet événement ?')) return; const ev=getEvents(); ev.splice(i,1); saveEvents(ev); renderEvents(); }
+  function copyLink(i){ const url=BASE_URL+'?event='+events[i].code; navigator.clipboard.writeText(url).then(()=>alert('Lien copié !\n'+url)); }
+  function openSpotify(i){ if(events[i].playlistUrl) window.open(events[i].playlistUrl,'_blank'); }
+  async function supprimerEvenement(i){ if(!confirm('Supprimer cet événement ?')) return; events.splice(i,1); await saveEvents(); renderEvents(); }
 
   init();
 </script>
