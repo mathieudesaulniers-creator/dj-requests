@@ -207,13 +207,13 @@
     const el=document.getElementById('plResults');
     if(!q.trim()){ el.style.display='none'; return; }
     plSearchTimeout=setTimeout(()=>{
-      const filtered=allPlaylists.filter(p=>p.name.toLowerCase().includes(q.toLowerCase()));
+      const filtered=allPlaylists.filter(p=>p&&p.name&&p.tracks&&p.name.toLowerCase().includes(q.toLowerCase()));
       if(!filtered.length){ el.style.display='none'; return; }
       el.style.display='block';
       el.innerHTML=filtered.map(p=>`
         <div class="pl-item" onclick="selectPlaylist('${p.id}','${esc(p.name)}',${p.tracks.total},'${p.images&&p.images[0]?p.images[0].url:''}','${p.external_urls?.spotify||''}')">
           ${p.images&&p.images[0]?`<img class="pl-img" src="${p.images[0].url}">`:'<div class="pl-img"></div>'}
-          <div><div class="pl-name">${p.name}</div><div class="pl-count">${p.tracks.total} chansons</div></div>
+          <div><div class="pl-name">${p.name}</div><div class="pl-count">${p.tracks?.total||0} chansons</div></div>
         </div>`).join('');
     },300);
   }
