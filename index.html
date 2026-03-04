@@ -52,19 +52,9 @@
     .modal-title { font-family:'Bebas Neue',sans-serif; font-size:32px; letter-spacing:2px; margin-bottom:24px; }
     .field { margin-bottom:16px; }
     .field label { display:block; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
-    .field input { width:100%; background:var(--black); border:1px solid var(--gray2); border-radius:4px; padding:12px 14px; font-family:'Space Mono',monospace; font-size:13px; color:var(--white); outline:none; }
-    .field input:focus { border-color:var(--accent); }
-    .playlist-results { background:var(--black); border:1px solid var(--gray2); border-radius:4px; margin-top:6px; overflow:hidden; display:none; max-height:200px; overflow-y:auto; }
-    .pl-item { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; border-bottom:1px solid var(--gray2); transition:background 0.15s; }
-    .pl-item:last-child { border-bottom:none; }
-    .pl-item:hover { background:var(--gray2); }
-    .pl-img { width:36px; height:36px; border-radius:2px; object-fit:cover; background:var(--gray2); flex-shrink:0; }
-    .pl-name { font-size:12px; font-weight:700; }
-    .pl-count { font-size:10px; color:var(--muted); margin-top:2px; }
-    .pl-selected { background:rgba(29,185,84,0.1); border:1px solid rgba(29,185,84,0.4); border-radius:4px; padding:10px 12px; margin-top:6px; display:none; align-items:center; gap:10px; }
-    .pl-selected img { width:36px; height:36px; border-radius:2px; }
-    .pl-selected-name { font-size:12px; font-weight:700; color:#1DB954; }
-    .pl-selected-count { font-size:10px; color:var(--muted); margin-top:2px; }
+    .field input, .field select { width:100%; background:var(--black); border:1px solid var(--gray2); border-radius:4px; padding:12px 14px; font-family:'Space Mono',monospace; font-size:13px; color:var(--white); outline:none; }
+    .field input:focus, .field select:focus { border-color:var(--accent); }
+    .field select option { background:var(--black); color:var(--white); }
     .modal-actions { display:flex; gap:10px; margin-top:24px; }
     .btn-create { flex:1; background:var(--accent); color:var(--white); border:none; border-radius:4px; padding:14px; font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:2px; cursor:pointer; }
     .btn-cancel { background:transparent; border:1px solid var(--gray2); color:var(--muted); border-radius:4px; padding:14px 20px; font-family:'Space Mono',monospace; font-size:12px; cursor:pointer; }
@@ -75,7 +65,6 @@
     #authScreen p { font-size:12px; color:var(--muted); line-height:1.9; margin-bottom:32px; }
     .pw-screen { text-align:center; padding:80px 20px; }
     .pw-screen input { background:var(--gray); border:1px solid var(--gray2); border-radius:4px; padding:12px 16px; font-family:'Space Mono',monospace; font-size:14px; color:var(--white); outline:none; width:100%; max-width:280px; margin-bottom:16px; text-align:center; letter-spacing:4px; }
-    .pw-screen input:focus { border-color:var(--accent); }
     .pw-btn { background:var(--accent); color:white; border:none; border-radius:4px; padding:14px 32px; font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:2px; cursor:pointer; }
     .pw-error { color:var(--accent); font-size:11px; margin-top:8px; display:none; }
   </style>
@@ -118,15 +107,9 @@
     <div class="field"><label>Date</label><input type="date" id="eventDate"></div>
     <div class="field">
       <label>Playlist Spotify</label>
-      <input type="text" id="plSearch" placeholder="Chercher une playlist..." autocomplete="off" oninput="searchPlaylists(this.value)">
-      <div class="playlist-results" id="plResults"></div>
-      <div class="pl-selected" id="plSelected">
-        <img id="plSelectedImg" src="" alt="">
-        <div>
-          <div class="pl-selected-name" id="plSelectedName"></div>
-          <div class="pl-selected-count" id="plSelectedCount"></div>
-        </div>
-      </div>
+      <select id="plDropdown">
+        <option value="">-- Choisir une playlist --</option>
+      </select>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal()">Annuler</button>
@@ -145,7 +128,7 @@
   const TOKEN_KEY='djreq_token', EXPIRY_KEY='djreq_expiry', USER_KEY='djreq_user';
   const DJ_PASSWORD='dj2026';
   const PW_KEY='djreq_pw';
-  let token=null, events=[], allPlaylists=[], selectedPlaylist=null, plSearchTimeout=null;
+  let token=null, events=[];
 
   function getToken(){ const e=localStorage.getItem(EXPIRY_KEY); return(e&&Date.now()<parseInt(e))?localStorage.getItem(TOKEN_KEY):null; }
 
@@ -189,46 +172,33 @@
     if(!user){ const r=await fetch('https://api.spotify.com/v1/me',{headers:{'Authorization':'Bearer '+token}}); user=await r.json(); localStorage.setItem(USER_KEY,JSON.stringify(user)); }
     document.getElementById('userName').textContent=user.display_name||user.id;
     if(user.images&&user.images[0]) document.getElementById('userAvatar').src=user.images[0].url;
-    // Load all playlists
-    const plRes=await fetch('https://api.spotify.com/v1/me/playlists?limit=50',{headers:{'Authorization':'Bearer '+token}});
-    const plData=await plRes.json();
-    allPlaylists=plData.items||[];
+    await loadPlaylists();
     events=record.events||[];
     renderEvents(record);
+  }
+
+  async function loadPlaylists(){
+    try{
+      const res=await fetch('https://api.spotify.com/v1/me/playlists?limit=50',{headers:{'Authorization':'Bearer '+token}});
+      const data=await res.json();
+      const playlists=(data.items||[]).filter(p=>p&&p.name&&p.id);
+      const sel=document.getElementById('plDropdown');
+      sel.innerHTML='<option value="">-- Choisir une playlist --</option>';
+      playlists.forEach(p=>{
+        const opt=document.createElement('option');
+        opt.value=p.id;
+        opt.dataset.name=p.name;
+        opt.dataset.url=p.external_urls?.spotify||'';
+        opt.textContent=p.name;
+        sel.appendChild(opt);
+      });
+    }catch(e){ console.error('Erreur chargement playlists',e); }
   }
 
   async function init(){
     if(!sessionStorage.getItem(PW_KEY)){ document.getElementById('pwScreen').style.display='block'; return; }
     checkAuth();
   }
-
-  function searchPlaylists(q){
-    clearTimeout(plSearchTimeout);
-    const el=document.getElementById('plResults');
-    if(!q.trim()){ el.style.display='none'; return; }
-    plSearchTimeout=setTimeout(()=>{
-      const filtered=allPlaylists.filter(p=>p&&p.name&&p.tracks&&p.name.toLowerCase().includes(q.toLowerCase()));
-      if(!filtered.length){ el.style.display='none'; return; }
-      el.style.display='block';
-      el.innerHTML=filtered.map(p=>`
-        <div class="pl-item" onclick="selectPlaylist('${p.id}','${esc(p.name)}',${p.tracks.total},'${p.images&&p.images[0]?p.images[0].url:''}','${p.external_urls?.spotify||''}')">
-          ${p.images&&p.images[0]?`<img class="pl-img" src="${p.images[0].url}">`:'<div class="pl-img"></div>'}
-          <div><div class="pl-name">${p.name}</div><div class="pl-count">${p.tracks?.total||0} chansons</div></div>
-        </div>`).join('');
-    },300);
-  }
-
-  function selectPlaylist(id,name,count,img,url){
-    selectedPlaylist={id,name,count,img,url};
-    document.getElementById('plResults').style.display='none';
-    document.getElementById('plSearch').value=name;
-    document.getElementById('plSelectedImg').src=img;
-    document.getElementById('plSelectedName').textContent=name;
-    document.getElementById('plSelectedCount').textContent=count+' chansons';
-    document.getElementById('plSelected').style.display='flex';
-  }
-
-  function esc(s){ return s.replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 
   function renderEvents(record){
     const c=document.getElementById('eventsList');
@@ -283,17 +253,12 @@
   async function dismissRequest(reqId){
     const record=await loadData();
     record.requests=(record.requests||[]).filter(r=>r.id!==reqId);
-    await saveData(record);
-    events=record.events||[];
-    renderEvents(record);
+    await saveData(record); events=record.events||[]; renderEvents(record);
   }
 
   function formatDate(d){ const [y,m,day]=d.split('-'); const mo=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']; return `${parseInt(day)} ${mo[parseInt(m)-1]} ${y}`; }
 
   function openModal(){
-    selectedPlaylist=null;
-    document.getElementById('plSelected').style.display='none';
-    document.getElementById('plSearch').value='';
     document.getElementById('modalOverlay').classList.add('open');
     document.getElementById('eventDate').value=new Date().toISOString().split('T')[0];
     setTimeout(()=>document.getElementById('eventName').focus(),100);
@@ -301,26 +266,29 @@
 
   function closeModal(){
     document.getElementById('modalOverlay').classList.remove('open');
-    ['eventName'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('eventName').value='';
+    document.getElementById('plDropdown').value='';
     document.getElementById('btnCreate').innerHTML='Créer';
     document.getElementById('btnCreate').disabled=false;
-    selectedPlaylist=null;
   }
 
   async function creerEvenement(){
     const name=document.getElementById('eventName').value.trim();
     const date=document.getElementById('eventDate').value;
+    const sel=document.getElementById('plDropdown');
+    const plId=sel.value;
+    const plName=sel.options[sel.selectedIndex]?.text||'';
+    const plUrl=sel.options[sel.selectedIndex]?.dataset?.url||'';
     if(!name){ document.getElementById('eventName').focus(); return; }
-    if(!selectedPlaylist){ alert('Choisis une playlist Spotify !'); return; }
+    if(!plId){ alert('Choisis une playlist Spotify !'); return; }
     const btn=document.getElementById('btnCreate');
     btn.innerHTML='<span class="spinner"></span>Création...'; btn.disabled=true;
     try{
       const code=Math.random().toString(36).substring(2,8).toUpperCase();
       const record=await loadData();
       record.events=record.events||[];
-      record.events.unshift({name,date,playlistName:selectedPlaylist.name,playlistId:selectedPlaylist.id,playlistUrl:selectedPlaylist.url,code,createdAt:Date.now()});
-      await saveData(record);
-      events=record.events;
+      record.events.unshift({name,date,playlistName:plName,playlistId:plId,playlistUrl:plUrl,code,createdAt:Date.now()});
+      await saveData(record); events=record.events;
       closeModal(); renderEvents(record);
     }catch(e){ alert('Erreur. Réessaie.'); btn.innerHTML='Créer'; btn.disabled=false; }
   }
